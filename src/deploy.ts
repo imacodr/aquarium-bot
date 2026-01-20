@@ -2,21 +2,31 @@ import { REST, Routes } from "discord.js";
 import fs from "fs";
 import path from "path";
 
-const commands = [];
+const commands: any[] = [];
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs
-  .readdirSync(commandsPath)
-  .filter((file) => file.endsWith(".ts") || file.endsWith(".js"));
 
 // Place your client and guild ids here
 const clientId = process.env.CLIENTID as string;
 const guildId = process.env.GUILDID as string;
 
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  //@ts-ignore
-  commands.push(command.default.data.toJSON());
+function loadCommands(dir: string): void {
+  const items = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const item of items) {
+    const itemPath = path.join(dir, item.name);
+
+    if (item.isDirectory()) {
+      loadCommands(itemPath);
+    } else if (item.name.endsWith(".ts") || item.name.endsWith(".js")) {
+      const command = require(itemPath);
+      if (command.default?.data?.toJSON) {
+        commands.push(command.default.data.toJSON());
+      }
+    }
+  }
 }
+
+loadCommands(commandsPath);
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN as string);
 

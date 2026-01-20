@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GuildConfig {
+  id                String   @id @default(cuid())
+  guildId           String   @unique
+  categoryId        String?
+
+  // Channel IDs for each language
+  englishChannelId    String?
+  spanishChannelId    String?
+  portugueseChannelId String?
+  frenchChannelId     String?
+  germanChannelId     String?
+  italianChannelId    String?
+  japaneseChannelId   String?
+  koreanChannelId     String?
+  chineseChannelId    String?
+
+  // Webhook IDs for each language channel
+  englishWebhookId      String?
+  englishWebhookToken   String?
+  spanishWebhookId      String?
+  spanishWebhookToken   String?
+  portugueseWebhookId   String?
+  portugueseWebhookToken String?
+  frenchWebhookId       String?
+  frenchWebhookToken    String?
+  germanWebhookId       String?
+  germanWebhookToken    String?
+  italianWebhookId      String?
+  italianWebhookToken   String?
+  japaneseWebhookId     String?
+  japaneseWebhookToken  String?
+  koreanWebhookId       String?
+  koreanWebhookToken    String?
+  chineseWebhookId      String?
+  chineseWebhookToken   String?
+
+  // Usage tracking
+  monthlyCharacterUsage Int      @default(0)
+  usageResetDate        DateTime @default(now())
+
+  // Subscription
+  subscriptionTier      String   @default("free") // free, pro, premium
+  subscriptionExpiresAt DateTime?
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  verifiedUsers VerifiedUser[]
+  usageLogs     UsageLog[]
+}
+
+model VerifiedUser {
+  id              String   @id @default(cuid())
+  discordId       String
+  guildId         String
+  username        String
+  discriminator   String?
+  avatar          String?
+
+  // Usage tracking per user
+  monthlyCharacterUsage Int      @default(0)
+  usageResetDate        DateTime @default(now())
+
+  // Streak tracking
+  currentStreak    Int      @default(0)
+  longestStreak    Int      @default(0)
+  lastActiveDate   DateTime?
+  totalTranslations Int     @default(0)
+
+  // Achievements (stored as JSON array of achievement IDs)
+  achievements     String   @default("[]")
+
+  verifiedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Link to global user (optional for backwards compatibility)
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
+
+  guildConfig GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  usageLogs   UsageLog[]
+
+  @@unique([discordId, guildId])
+  @@index([discordId])
+  @@index([guildId])
+  @@index([userId])
+}
+
+model UsageLog {
+  id            String   @id @default(cuid())
+  guildId       String
+  userId        String
+  sourceLanguage String
+  targetLanguage String
+  characterCount Int
+
+  createdAt DateTime @default(now())
+
+  guildConfig  GuildConfig  @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  verifiedUser VerifiedUser @relation(fields: [userId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@index([guildId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+// Global user model for personal subscriptions (separate from per-guild VerifiedUser)
+model User {
+  id        String  @id @default(cuid())
+  discordId String  @unique
+  username  String
+  avatar    String?
+
+  // Personal subscription (independent of any server)
+  subscriptionTier      String    @default("free") // free, pro, premium
+  subscriptionExpiresAt DateTime?
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+
+  // Global stats (aggregated across all servers)
+  totalTranslationsAllTime Int @default(0)
+  totalCharactersAllTime   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  verifiedUsers VerifiedUser[]
+}

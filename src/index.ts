@@ -1,10 +1,115 @@
 import express from "express";
-//START DISCORD BOT
-require("./client");
+import session from "express-session";
+import passport from "passport";
+import { Strategy as DiscordStrategy, Profile } from "passport-discord";
+import cors from "cors";
+
+import { client } from "./client";
+import { registerEvents } from "./events";
+import authRoutes from "./web/routes/auth";
+import apiRoutes from "./web/routes/api";
+import {
+  BASE_URL,
+  DASHBOARD_URL,
+  DISCORD_OAUTH_SCOPES,
+  SESSION_MAX_AGE,
+} from "./config/constants";
+import { stripeService, constructWebhookEvent } from "./services/stripe";
+
 const PORT = process.env.PORT || 4001;
 
 const app = express();
 
-app.listen(PORT, function () {
-  console.log("Listening on Port " + PORT);
+// CORS configuration for Next.js dashboard
+app.use(
+  cors({
+    origin: DASHBOARD_URL,
+    credentials: true,
+  })
+);
+
+// Stripe webhook endpoint (must be before json parser)
+app.post(
+  "/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const signature = req.headers["stripe-signature"] as string;
+
+    try {
+      const event = constructWebhookEvent(req.body, signature);
+      await stripeService.handleWebhookEvent(event);
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("Webhook error:", error.message);
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+app.use(express.json());
+
+// Session configuration
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: SESSION_MAX_AGE,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    },
+  })
+);
+
+// Passport configuration
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Discord OAuth2 Strategy
+passport.use(
+  new DiscordStrategy(
+    {
+      clientID: process.env.CLIENTID!,
+      clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+      callbackURL: `${BASE_URL}/auth/discord/callback`,
+      scope: DISCORD_OAUTH_SCOPES,
+    },
+    (accessToken: string, refreshToken: string, profile: Profile, done: (err: any, user?: any) => void) => {
+      // Return the Discord profile as the user
+      return done(null, {
+        id: profile.id,
+        username: profile.username,
+        discriminator: profile.discriminator,
+        avatar: profile.avatar,
+      });
+    }
+  )
+);
+
+passport.serializeUser((user: any, done) => {
+  done(null, user);
+});
+
+passport.deserializeUser((user: any, done) => {
+  done(null, user);
+});
+
+// Routes
+app.use("/auth", authRoutes);
+app.use("/api", apiRoutes);
+
+// Health check
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+// Start Express server
+app.listen(PORT, () => {
+  console.log(`Express server listening on port ${PORT}`);
+});
+
+// Register Discord event handlers once client is ready
+client.once("ready", () => {
+  registerEvents(client);
 });

@@ -6,13 +6,12 @@ import {
   Collection,
   GatewayIntentBits,
 } from "discord.js";
-// @ts-ignore
 import path from "path";
 import fs from "fs";
 import { Interaction } from "discord.js";
 dotEnvConfig();
 
-class codrClient extends Client {
+class CodrClient extends Client {
   public commands: Collection<string, any>;
 
   constructor(options: ClientOptions) {
@@ -21,28 +20,42 @@ class codrClient extends Client {
     this.commands = new Collection();
 
     const commandsPath = path.join(__dirname, "commands");
-    const commandFiles = fs
-      .readdirSync(commandsPath)
-      .filter((file) => file.endsWith(".js") || file.endsWith(".ts"));
+    this.loadCommands(commandsPath);
+  }
 
-    for (const file of commandFiles) {
-      const filePath = path.join(commandsPath, file);
-      const command = require(filePath);
-      this.commands.set(command.default.data.name, command.default);
+  private loadCommands(dir: string): void {
+    const items = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const item of items) {
+      const itemPath = path.join(dir, item.name);
+
+      if (item.isDirectory()) {
+        // Recursively load commands from subdirectories
+        this.loadCommands(itemPath);
+      } else if (item.name.endsWith(".js") || item.name.endsWith(".ts")) {
+        const command = require(itemPath);
+        if (command.default?.data?.name) {
+          this.commands.set(command.default.data.name, command.default);
+        }
+      }
     }
   }
 }
 
-const client = new codrClient({
+const client = new CodrClient({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent,
   ],
 });
 
+export { client };
+export default client;
+
 client.once("ready", () => {
-  const ACTIVITY = "for /help";
+  const ACTIVITY = "/help | watching the fish in the sea";
   client.user?.setActivity(ACTIVITY, {
     type: ActivityType.Watching,
   });
