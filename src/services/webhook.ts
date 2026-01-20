@@ -14,19 +14,85 @@ interface WebhookInfo {
   token: string;
 }
 
+interface CachedWebhookClient {
+  client: WebhookClient;
+  lastUsed: number;
+}
+
+// Cache configuration
+const WEBHOOK_CACHE_MAX_SIZE = 100;
+const WEBHOOK_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 class WebhookService {
-  private webhookClients: Map<string, WebhookClient> = new Map();
+  private webhookClients: Map<string, CachedWebhookClient> = new Map();
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Start periodic cleanup
+    this.cleanupInterval = setInterval(() => this.cleanupExpiredClients(), 5 * 60 * 1000);
+  }
 
   private getWebhookClient(webhookId: string, webhookToken: string): WebhookClient {
     const key = `${webhookId}:${webhookToken}`;
-    let client = this.webhookClients.get(key);
+    const cached = this.webhookClients.get(key);
 
-    if (!client) {
-      client = new WebhookClient({ id: webhookId, token: webhookToken });
-      this.webhookClients.set(key, client);
+    if (cached) {
+      cached.lastUsed = Date.now();
+      return cached.client;
     }
 
+    // Enforce cache size limit
+    if (this.webhookClients.size >= WEBHOOK_CACHE_MAX_SIZE) {
+      this.evictOldestClient();
+    }
+
+    const client = new WebhookClient({ id: webhookId, token: webhookToken });
+    this.webhookClients.set(key, { client, lastUsed: Date.now() });
+
     return client;
+  }
+
+  private evictOldestClient(): void {
+    let oldestKey: string | null = null;
+    let oldestTime = Infinity;
+
+    for (const [key, cached] of this.webhookClients.entries()) {
+      if (cached.lastUsed < oldestTime) {
+        oldestTime = cached.lastUsed;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      const cached = this.webhookClients.get(oldestKey);
+      if (cached) {
+        cached.client.destroy();
+        this.webhookClients.delete(oldestKey);
+      }
+    }
+  }
+
+  private cleanupExpiredClients(): void {
+    const now = Date.now();
+    const keysToDelete: string[] = [];
+
+    for (const [key, cached] of this.webhookClients.entries()) {
+      if (now - cached.lastUsed > WEBHOOK_CACHE_TTL_MS) {
+        keysToDelete.push(key);
+      }
+    }
+
+    for (const key of keysToDelete) {
+      const cached = this.webhookClients.get(key);
+      if (cached) {
+        cached.client.destroy();
+        this.webhookClients.delete(key);
+      }
+    }
+
+    if (keysToDelete.length > 0) {
+      console.log(`Cleaned up ${keysToDelete.length} expired webhook clients`);
+    }
   }
 
   async createWebhookForChannel(channel: TextChannel): Promise<Webhook> {
@@ -72,7 +138,11 @@ class WebhookService {
       if (error.code === 10015) {
         // Unknown Webhook
         const key = `${webhookId}:${webhookToken}`;
-        this.webhookClients.delete(key);
+        const cached = this.webhookClients.get(key);
+        if (cached) {
+          cached.client.destroy();
+          this.webhookClients.delete(key);
+        }
         throw new Error("Webhook was deleted and needs to be recreated");
       }
       throw error;
@@ -132,10 +202,18 @@ class WebhookService {
   }
 
   clearCache(): void {
-    for (const client of this.webhookClients.values()) {
-      client.destroy();
+    for (const cached of this.webhookClients.values()) {
+      cached.client.destroy();
     }
     this.webhookClients.clear();
+  }
+
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.clearCache();
   }
 }
 

@@ -133,12 +133,11 @@ model UsageLog {
 }
 
 model Session {
-  id        String   @id
-  sid       String   @unique
-  data      String
-  expiresAt DateTime
+  sid    String   @id @db.VarChar(255)
+  sess   Json
+  expire DateTime @db.Timestamptz
 
-  @@index([expiresAt])
+  @@map("session")
 }
 
 // Immersion ban/timeout tracking

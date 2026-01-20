@@ -59,7 +59,13 @@ client.once("ready", () => {
   client.user?.setActivity(ACTIVITY, {
     type: ActivityType.Watching,
   });
-  require("./deploy");
+
+  // Deploy commands - wrapped in try-catch for safety
+  try {
+    require("./deploy");
+  } catch (error) {
+    console.error("Error loading deploy module:", error);
+  }
 });
 
 client.on("interactionCreate", async (interaction: Interaction) => {
@@ -71,11 +77,19 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     try {
       await command.execute(interaction);
     } catch (error) {
-      console.error(error);
-      await interaction.reply({
-        content: "There was an error while executing this command!",
-        ephemeral: true,
-      });
+      console.error(`Error executing command "${interaction.commandName}":`, error);
+
+      // Try to respond to the user
+      try {
+        const errorMessage = "There was an error while executing this command!";
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: errorMessage, ephemeral: true });
+        } else {
+          await interaction.reply({ content: errorMessage, ephemeral: true });
+        }
+      } catch (replyError) {
+        console.error("Failed to send error response:", replyError);
+      }
     }
   }
   if (interaction.isModalSubmit()) {
@@ -86,11 +100,18 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     try {
       await command.additionalInteractions.modal(interaction);
     } catch (error) {
-      console.error(error);
-      await interaction.reply({
-        content: "There was an error while executing this command!",
-        ephemeral: true,
-      });
+      console.error(`Error executing modal "${interaction.customId}":`, error);
+
+      try {
+        const errorMessage = "There was an error while processing this form!";
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: errorMessage, ephemeral: true });
+        } else {
+          await interaction.reply({ content: errorMessage, ephemeral: true });
+        }
+      } catch (replyError) {
+        console.error("Failed to send error response:", replyError);
+      }
     }
   }
 });

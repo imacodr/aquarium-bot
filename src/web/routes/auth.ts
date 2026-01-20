@@ -19,13 +19,26 @@ router.get(
   }
 );
 
-// Logout
+// Logout - properly destroy session and clear cookie
 router.get("/logout", (req, res, next) => {
   req.logout((err) => {
     if (err) {
       return next(err);
     }
-    res.redirect(DASHBOARD_URL);
+    // Destroy session in database
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        console.error("Error destroying session:", destroyErr);
+      }
+      // Clear the session cookie
+      res.clearCookie("lebron.sid", {
+        path: "/",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      });
+      res.redirect(DASHBOARD_URL);
+    });
   });
 });
 
