@@ -8,7 +8,7 @@ import {
 } from "discord.js";
 import { prisma } from "../../database/prisma";
 import { LANGUAGES } from "../../config/languages";
-import { IMMERSION_CATEGORY_NAME } from "../../config/constants";
+import { IMMERSION_CATEGORY_NAME, IMMERSION_CHANNEL_SLOWMODE } from "../../config/constants";
 import { webhookService } from "../../services/webhook";
 
 export default {
@@ -100,6 +100,7 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
         type: ChannelType.GuildText,
         parent: category.id,
         topic: `${lang.emoji} ${lang.name} - Language immersion channel. Messages here will be translated to other language channels.`,
+        rateLimitPerUser: IMMERSION_CHANNEL_SLOWMODE,
         reason: "Language immersion setup",
       });
 

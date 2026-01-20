@@ -6,6 +6,10 @@ import { getTierLimits, getEffectiveUserLimit, getEffectiveTierSource, USER_SUBS
 import { stripeService } from "../../services/stripe";
 import { SUBSCRIPTION_TIERS } from "../../config/subscriptions";
 import { ACHIEVEMENTS, getAchievementById } from "../../config/achievements";
+import {
+  parseSubscribedLanguages,
+  getSubscribedLanguagesDisplay,
+} from "../../config/preferences";
 
 const router = Router();
 
@@ -68,12 +72,16 @@ router.get("/guilds", isAuthenticated, async (req: Request, res: Response) => {
             where: { guildId },
           });
 
+          // Check if user is an admin
+          const isAdmin = member.permissions.has("Administrator");
+
           mutualGuilds.push({
             id: guild.id,
             name: guild.name,
             icon: guild.iconURL(),
             isVerified: verifiedGuildIds.has(guildId),
             hasImmersion: !!config?.categoryId,
+            isAdmin,
             subscription: config
               ? {
                   tier: config.subscriptionTier,
@@ -399,6 +407,9 @@ router.get("/guilds/:id/profile", isAuthenticated, async (req: Request, res: Res
       .map((id) => getAchievementById(id))
       .filter((a) => a !== undefined);
 
+    // Parse subscribed languages
+    const subscribedLanguages = parseSubscribedLanguages(verifiedUser.subscribedLanguages || "[]");
+
     res.json({
       profile: {
         discordId: verifiedUser.discordId,
@@ -417,6 +428,13 @@ router.get("/guilds/:id/profile", isAuthenticated, async (req: Request, res: Res
         earned: earnedAchievements,
         total: ACHIEVEMENTS.length,
         all: ACHIEVEMENTS,
+      },
+      // Preferences
+      preferences: {
+        subscribedLanguages,
+        subscribedLanguagesDisplay: getSubscribedLanguagesDisplay(subscribedLanguages),
+        displayMode: verifiedUser.displayMode || "detailed",
+        showOnLeaderboard: verifiedUser.showOnLeaderboard ?? true,
       },
       // Tier information
       effectiveTier,
@@ -448,6 +466,16 @@ router.get("/guilds/:id/leaderboard", isAuthenticated, async (req: Request, res:
       return res.status(403).json({ error: "You are not a member of this server" });
     }
 
+    // Get users who have opted out of leaderboard (privacy filter)
+    const hiddenUsers = await prisma.verifiedUser.findMany({
+      where: {
+        guildId,
+        showOnLeaderboard: false,
+      },
+      select: { discordId: true },
+    });
+    const hiddenUserIds = hiddenUsers.map((u) => u.discordId);
+
     let leaderboardData;
 
     if (type === "month") {
@@ -460,6 +488,7 @@ router.get("/guilds/:id/leaderboard", isAuthenticated, async (req: Request, res:
         where: {
           guildId,
           createdAt: { gte: startOfMonth },
+          userId: { notIn: hiddenUserIds },
         },
         _sum: { characterCount: true },
         orderBy: { _sum: { characterCount: "desc" } },
@@ -468,7 +497,10 @@ router.get("/guilds/:id/leaderboard", isAuthenticated, async (req: Request, res:
     } else {
       leaderboardData = await prisma.usageLog.groupBy({
         by: ["userId"],
-        where: { guildId },
+        where: {
+          guildId,
+          userId: { notIn: hiddenUserIds },
+        },
         _sum: { characterCount: true },
         orderBy: { _sum: { characterCount: "desc" } },
         take: 10,
@@ -579,6 +611,160 @@ router.get("/guilds/:id/leaderboard", isAuthenticated, async (req: Request, res:
 // Get all achievements (public endpoint)
 router.get("/achievements", (_req: Request, res: Response) => {
   res.json({ achievements: ACHIEVEMENTS });
+});
+
+// ============ User Preferences Endpoints ============
+
+// Get user preferences for a guild
+router.get("/guilds/:id/preferences", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.id;
+    const userId = req.user!.id;
+
+    const verifiedUser = await prisma.verifiedUser.findUnique({
+      where: {
+        discordId_guildId: {
+          discordId: userId,
+          guildId,
+        },
+      },
+      include: { user: true },
+    });
+
+    if (!verifiedUser) {
+      return res.status(404).json({ error: "User not verified in this guild" });
+    }
+
+    const subscribedLanguages = parseSubscribedLanguages(verifiedUser.subscribedLanguages || "[]");
+
+    res.json({
+      preferences: {
+        subscribedLanguages,
+        subscribedLanguagesDisplay: getSubscribedLanguagesDisplay(subscribedLanguages),
+        displayMode: verifiedUser.displayMode || "detailed",
+        showOnLeaderboard: verifiedUser.showOnLeaderboard ?? true,
+        dmNotificationsEnabled: verifiedUser.user?.dmNotificationsEnabled ?? true,
+        nativeLanguage: verifiedUser.user?.nativeLanguage || null,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching preferences:", error);
+    res.status(500).json({ error: "Failed to fetch preferences" });
+  }
+});
+
+// Update user preferences for a guild
+router.patch("/guilds/:id/preferences", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.id;
+    const userId = req.user!.id;
+    const { subscribedLanguages, displayMode, showOnLeaderboard, dmNotificationsEnabled, nativeLanguage } = req.body;
+
+    const verifiedUser = await prisma.verifiedUser.findUnique({
+      where: {
+        discordId_guildId: {
+          discordId: userId,
+          guildId,
+        },
+      },
+    });
+
+    if (!verifiedUser) {
+      return res.status(404).json({ error: "User not verified in this guild" });
+    }
+
+    // Build update data for VerifiedUser (guild-specific)
+    const guildUpdateData: any = {};
+
+    if (subscribedLanguages !== undefined) {
+      if (!Array.isArray(subscribedLanguages)) {
+        return res.status(400).json({ error: "subscribedLanguages must be an array" });
+      }
+      // Validate language codes
+      const validCodes = ["EN", "ES", "PT-BR", "FR", "DE", "IT", "JA", "KO", "ZH"];
+      const invalidCodes = subscribedLanguages.filter((c: any) => !validCodes.includes(c));
+      if (invalidCodes.length > 0) {
+        return res.status(400).json({ error: `Invalid language codes: ${invalidCodes.join(", ")}` });
+      }
+      guildUpdateData.subscribedLanguages = JSON.stringify(subscribedLanguages);
+    }
+
+    if (displayMode !== undefined) {
+      if (!["detailed", "compact"].includes(displayMode)) {
+        return res.status(400).json({ error: "displayMode must be 'detailed' or 'compact'" });
+      }
+      guildUpdateData.displayMode = displayMode;
+    }
+
+    if (typeof showOnLeaderboard === "boolean") {
+      guildUpdateData.showOnLeaderboard = showOnLeaderboard;
+    }
+
+    // Update guild-specific preferences
+    if (Object.keys(guildUpdateData).length > 0) {
+      await prisma.verifiedUser.update({
+        where: {
+          discordId_guildId: {
+            discordId: userId,
+            guildId,
+          },
+        },
+        data: guildUpdateData,
+      });
+    }
+
+    // Update global preferences (User model)
+    const globalUpdateData: any = {};
+    if (typeof dmNotificationsEnabled === "boolean") {
+      globalUpdateData.dmNotificationsEnabled = dmNotificationsEnabled;
+    }
+    if (nativeLanguage !== undefined) {
+      const validCodes = ["EN", "ES", "PT-BR", "FR", "DE", "IT", "JA", "KO", "ZH", null];
+      if (!validCodes.includes(nativeLanguage)) {
+        return res.status(400).json({ error: "Invalid native language code" });
+      }
+      globalUpdateData.nativeLanguage = nativeLanguage;
+    }
+
+    if (Object.keys(globalUpdateData).length > 0) {
+      await prisma.user.upsert({
+        where: { discordId: userId },
+        create: {
+          discordId: userId,
+          username: req.user!.username,
+          avatar: req.user!.avatar,
+          ...globalUpdateData,
+        },
+        update: globalUpdateData,
+      });
+    }
+
+    // Update channel permissions if subscribedLanguages changed
+    if (guildUpdateData.subscribedLanguages !== undefined) {
+      const guildConfig = await prisma.guildConfig.findUnique({
+        where: { guildId },
+      });
+
+      if (guildConfig) {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) {
+          const { channelPermissionService } = await import("../../services/channelPermissions");
+          const languages = JSON.parse(guildUpdateData.subscribedLanguages);
+          await channelPermissionService.updateUserChannelAccess(
+            guild,
+            userId,
+            languages,
+            guildConfig
+          );
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating preferences:", error);
+    res.status(500).json({ error: "Failed to update preferences" });
+  }
 });
 
 // ============ User Subscription Endpoints ============

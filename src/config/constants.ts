@@ -12,6 +12,7 @@ export const USAGE_WARNING_THRESHOLD = 0.8; // Warn at 80% usage
 // URLs
 export const BASE_URL = process.env.BASE_URL || "http://localhost:4001";
 export const DASHBOARD_URL = process.env.DASHBOARD_URL || "http://localhost:3000";
+export const SUPPORT_SERVER_URL = process.env.SUPPORT_SERVER_URL || "https://discord.gg/aquarium";
 
 // OAuth2
 export const DISCORD_OAUTH_SCOPES = ["identify", "guilds"];
@@ -21,6 +22,7 @@ export const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Category and channel settings
 export const IMMERSION_CATEGORY_NAME = "Language Immersion";
+export const IMMERSION_CHANNEL_SLOWMODE = 5; // Slowmode in seconds for language channels
 
 // Message formatting
 export const TRANSLATION_PREFIX = "Translated";

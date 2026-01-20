@@ -5,6 +5,10 @@ import {
 } from "discord.js";
 import { prisma } from "../database/prisma";
 import { LANGUAGES } from "../config/languages";
+import {
+  parseSubscribedLanguages,
+  isSubscribedToLanguage,
+} from "../config/preferences";
 
 export default {
   data: new SlashCommandBuilder()
@@ -26,6 +30,20 @@ export default {
         where: { guildId: interaction.guild.id },
       });
 
+      // Get user's language subscriptions
+      const verifiedUser = await prisma.verifiedUser.findUnique({
+        where: {
+          discordId_guildId: {
+            discordId: interaction.user.id,
+            guildId: interaction.guild.id,
+          },
+        },
+      });
+
+      const subscribedLanguages = verifiedUser
+        ? parseSubscribedLanguages(verifiedUser.subscribedLanguages)
+        : [];
+
       // Build language list with channel mentions if set up
       const languageList = Object.values(LANGUAGES).map((lang) => {
         let channelId: string | null = null;
@@ -45,16 +63,25 @@ export default {
         }
 
         const channelMention = channelId ? `<#${channelId}>` : "*not set up*";
-        return `${lang.emoji} **${lang.name}** → ${channelMention}`;
+        const isSubscribed = isSubscribedToLanguage(subscribedLanguages, lang.code);
+        const subscriptionIndicator = verifiedUser
+          ? isSubscribed ? " ✓" : " ✗"
+          : "";
+        return `${lang.emoji} **${lang.name}**${subscriptionIndicator} → ${channelMention}`;
       });
+
+      const subscriptionNote = verifiedUser
+        ? "\n\n✓ = subscribed, ✗ = not subscribed\nUse `/preferences languages set` to change"
+        : "";
 
       const embed = new EmbedBuilder()
         .setColor(0x0ea5e9)
         .setTitle("Available Languages")
         .setDescription(
-          config?.categoryId
+          (config?.categoryId
             ? "Messages sent in any channel will be automatically translated to all other channels."
-            : "Language immersion is not set up yet. An admin can use `/immersion setup` to get started."
+            : "Language immersion is not set up yet. An admin can use `/immersion setup` to get started.") +
+          subscriptionNote
         )
         .addFields({
           name: "Languages",

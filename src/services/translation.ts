@@ -29,14 +29,21 @@ class TranslationService {
 
   async translateToAllLanguages(
     text: string,
-    sourceLang: string
+    sourceLang: string,
+    enabledLanguages?: string[]
   ): Promise<MultiTranslationResult> {
     const sourceLanguage = LANGUAGES[sourceLang];
     if (!sourceLanguage) {
       throw new Error(`Invalid source language code: ${sourceLang}`);
     }
 
-    const otherLanguages = getOtherLanguages(sourceLang);
+    let otherLanguages = getOtherLanguages(sourceLang);
+
+    // Filter to only enabled languages if specified
+    if (enabledLanguages && enabledLanguages.length > 0) {
+      otherLanguages = otherLanguages.filter(lang => enabledLanguages.includes(lang.code));
+    }
+
     const translations = new Map<string, string>();
 
     // Translate to each target language in parallel

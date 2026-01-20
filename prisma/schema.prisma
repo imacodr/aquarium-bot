@@ -43,6 +43,13 @@ model GuildConfig {
   chineseWebhookId      String?
   chineseWebhookToken   String?
 
+  // Moderation settings
+  modLogChannelId       String?
+
+  // Language settings - JSON array of enabled language codes, empty = all enabled
+  enabledLanguages      String   @default("[]")
+  disabledCategoryId    String?  // Category for disabled language channels
+
   // Usage tracking
   monthlyCharacterUsage Int      @default(0)
   usageResetDate        DateTime @default(now())
@@ -80,6 +87,15 @@ model VerifiedUser {
 
   // Achievements (stored as JSON array of achievement IDs)
   achievements     String   @default("[]")
+
+  // Language subscriptions - JSON array of codes, empty = all languages
+  subscribedLanguages   String   @default("[]")
+
+  // Display preferences
+  displayMode           String   @default("detailed")  // "detailed" | "compact"
+
+  // Privacy
+  showOnLeaderboard     Boolean  @default(true)
 
   verifiedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -124,6 +140,77 @@ model Session {
   @@index([expiresAt])
 }
 
+// Immersion ban/timeout tracking
+model ImmersionBan {
+  id        String   @id @default(cuid())
+  guildId   String
+  discordId String   // The banned user
+
+  // Ban details
+  reason    String?
+  bannedBy  String   // Moderator who issued the ban
+  bannedAt  DateTime @default(now())
+  expiresAt DateTime? // null = permanent
+
+  // Status
+  active    Boolean  @default(true)
+
+  // If unbanned early
+  unbannedBy String?
+  unbannedAt DateTime?
+  unbanReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([discordId, guildId, active]) // Only one active ban per user per guild
+  @@index([guildId])
+  @@index([discordId])
+  @@index([expiresAt])
+  @@index([active])
+}
+
+// Moderation action log for audit trail
+model ModerationLog {
+  id        String   @id @default(cuid())
+  guildId   String
+  targetId  String   // User who was moderated
+  moderatorId String // User who performed the action
+
+  // Action details
+  action    String   // "ban", "unban", "timeout", "warn", "clear_warnings"
+  reason    String?
+  duration  Int?     // Duration in seconds (for timeouts)
+  metadata  String?  // JSON for additional data
+
+  createdAt DateTime @default(now())
+
+  @@index([guildId])
+  @@index([targetId])
+  @@index([moderatorId])
+  @@index([createdAt])
+}
+
+// Warning system
+model ImmersionWarning {
+  id        String   @id @default(cuid())
+  guildId   String
+  discordId String   // The warned user
+
+  // Warning details
+  reason    String
+  warnedBy  String   // Moderator who issued the warning
+
+  // Status
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([guildId])
+  @@index([discordId])
+  @@index([active])
+}
+
 // Global user model for personal subscriptions (separate from per-guild VerifiedUser)
 model User {
   id        String  @id @default(cuid())
@@ -140,6 +227,15 @@ model User {
   // Global stats (aggregated across all servers)
   totalTranslationsAllTime Int @default(0)
   totalCharactersAllTime   Int @default(0)
+
+  // Native language for UI
+  nativeLanguage          String?
+
+  // Notification preferences (JSON)
+  notificationPrefs       String   @default("{\"achievements\":true,\"streaks\":true}")
+
+  // Master DM toggle
+  dmNotificationsEnabled  Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

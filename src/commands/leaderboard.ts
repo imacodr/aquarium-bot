@@ -38,6 +38,16 @@ export default {
     try {
       let leaderboardData;
 
+      // Get users who have opted out of leaderboard
+      const hiddenUsers = await prisma.verifiedUser.findMany({
+        where: {
+          guildId: interaction.guild.id,
+          showOnLeaderboard: false,
+        },
+        select: { discordId: true },
+      });
+      const hiddenUserIds = hiddenUsers.map((u) => u.discordId);
+
       if (type === "month") {
         // Get this month's usage from UsageLog
         const startOfMonth = new Date();
@@ -49,6 +59,7 @@ export default {
           where: {
             guildId: interaction.guild.id,
             createdAt: { gte: startOfMonth },
+            userId: { notIn: hiddenUserIds },
           },
           _sum: { characterCount: true },
           orderBy: { _sum: { characterCount: "desc" } },
@@ -59,7 +70,10 @@ export default {
         // For now, use UsageLog totals
         leaderboardData = await prisma.usageLog.groupBy({
           by: ["userId"],
-          where: { guildId: interaction.guild.id },
+          where: {
+            guildId: interaction.guild.id,
+            userId: { notIn: hiddenUserIds },
+          },
           _sum: { characterCount: true },
           orderBy: { _sum: { characterCount: "desc" } },
           take: 10,

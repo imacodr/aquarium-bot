@@ -2,6 +2,7 @@ import { Message, TextChannel, EmbedBuilder } from "discord.js";
 import { prisma } from "../database/prisma";
 import { translationService } from "../services/translation";
 import { webhookService } from "../services/webhook";
+import { moderationService } from "../services/moderation";
 import { LANGUAGES } from "../config/languages";
 import { USAGE_WARNING_THRESHOLD, BASE_URL, DASHBOARD_URL } from "../config/constants";
 import { getTierLimits, getEffectiveUserLimit } from "../config/subscriptions";
@@ -31,17 +32,26 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     // If no config or no category set up, ignore
     if (!config?.categoryId) return;
 
-    // Build channel to language map
+    // Parse enabled languages (empty array means all enabled)
+    const enabledLanguages: string[] = JSON.parse(config.enabledLanguages || "[]");
+
+    // Build channel to language map (only for enabled languages)
     const channelLanguageMap: ChannelLanguageMap = {};
-    if (config.englishChannelId) channelLanguageMap[config.englishChannelId] = "EN";
-    if (config.spanishChannelId) channelLanguageMap[config.spanishChannelId] = "ES";
-    if (config.portugueseChannelId) channelLanguageMap[config.portugueseChannelId] = "PT-BR";
-    if (config.frenchChannelId) channelLanguageMap[config.frenchChannelId] = "FR";
-    if (config.germanChannelId) channelLanguageMap[config.germanChannelId] = "DE";
-    if (config.italianChannelId) channelLanguageMap[config.italianChannelId] = "IT";
-    if (config.japaneseChannelId) channelLanguageMap[config.japaneseChannelId] = "JA";
-    if (config.koreanChannelId) channelLanguageMap[config.koreanChannelId] = "KO";
-    if (config.chineseChannelId) channelLanguageMap[config.chineseChannelId] = "ZH";
+    const addChannel = (channelId: string | null, langCode: string) => {
+      if (channelId && (enabledLanguages.length === 0 || enabledLanguages.includes(langCode))) {
+        channelLanguageMap[channelId] = langCode;
+      }
+    };
+
+    addChannel(config.englishChannelId, "EN");
+    addChannel(config.spanishChannelId, "ES");
+    addChannel(config.portugueseChannelId, "PT-BR");
+    addChannel(config.frenchChannelId, "FR");
+    addChannel(config.germanChannelId, "DE");
+    addChannel(config.italianChannelId, "IT");
+    addChannel(config.japaneseChannelId, "JA");
+    addChannel(config.koreanChannelId, "KO");
+    addChannel(config.chineseChannelId, "ZH");
 
     // Check if message is in an immersion channel
     const sourceLang = channelLanguageMap[message.channel.id];
@@ -81,6 +91,50 @@ export async function handleMessageCreate(message: Message): Promise<void> {
         });
         // Delete after 15 seconds
         setTimeout(() => reply.delete().catch(() => {}), 15000);
+      }
+      return;
+    }
+
+    // Check if user is banned from immersion
+    const banStatus = await moderationService.getBanStatus(
+      message.guild.id,
+      message.author.id
+    );
+
+    if (banStatus.isBanned) {
+      // Delete the message silently
+      await message.delete().catch(() => {});
+
+      // Build ban notification embed
+      const banEmbed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle("Immersion Access Restricted")
+        .setDescription(
+          `You are currently banned from using language immersion in **${message.guild.name}**.`
+        );
+
+      if (banStatus.reason) {
+        banEmbed.addFields({ name: "Reason", value: banStatus.reason });
+      }
+
+      if (banStatus.expiresAt) {
+        banEmbed.addFields({
+          name: "Ban Expires",
+          value: `<t:${Math.floor(banStatus.expiresAt.getTime() / 1000)}:R>`,
+        });
+      } else {
+        banEmbed.addFields({ name: "Duration", value: "Permanent" });
+      }
+
+      banEmbed.setFooter({
+        text: "Contact a moderator if you believe this is a mistake.",
+      });
+
+      // Try to DM the user (only once per session to avoid spam)
+      try {
+        await message.author.send({ embeds: [banEmbed] });
+      } catch {
+        // DMs disabled - silently delete the message
       }
       return;
     }
@@ -153,7 +207,10 @@ export async function handleMessageCreate(message: Message): Promise<void> {
     const effectiveUserLimit = getEffectiveUserLimit(userTier, config.subscriptionTier);
 
     // Calculate character cost (message length * number of target languages)
-    const numTargetLanguages = Object.keys(LANGUAGES).length - 1; // All languages minus source
+    // If enabledLanguages is set, only count those; otherwise count all minus source
+    const numTargetLanguages = enabledLanguages.length > 0
+      ? enabledLanguages.filter(lang => lang !== sourceLang).length
+      : Object.keys(LANGUAGES).length - 1;
     const characterCost = message.content.length * numTargetLanguages;
 
     // Check user limit (using effective limit that considers both tiers)
@@ -208,10 +265,11 @@ export async function handleMessageCreate(message: Message): Promise<void> {
       return;
     }
 
-    // Translate to all other languages
+    // Translate to all other enabled languages
     const result = await translationService.translateToAllLanguages(
       message.content,
-      sourceLang
+      sourceLang,
+      enabledLanguages.length > 0 ? enabledLanguages : undefined
     );
 
     // Send translations via webhooks

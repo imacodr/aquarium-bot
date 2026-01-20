@@ -8,6 +8,9 @@ import { client } from "./client";
 import { registerEvents } from "./events";
 import authRoutes from "./web/routes/auth";
 import apiRoutes from "./web/routes/api";
+import adminRoutes from "./web/routes/admin";
+import immersionRoutes from "./web/routes/immersion";
+import moderationRoutes from "./web/routes/moderation";
 import {
   BASE_URL,
   DASHBOARD_URL,
@@ -15,6 +18,11 @@ import {
   SESSION_MAX_AGE,
 } from "./config/constants";
 import { stripeService, constructWebhookEvent } from "./services/stripe";
+import {
+  securityHeaders,
+  apiRateLimiter,
+  authRateLimiter,
+} from "./web/middleware/security";
 
 const PORT = process.env.PORT || 4001;
 
@@ -47,6 +55,9 @@ app.post(
 );
 
 app.use(express.json());
+
+// Security headers
+app.use(securityHeaders);
 
 // Trust proxy for production (Render, Railway, etc.)
 if (process.env.NODE_ENV === "production") {
@@ -101,9 +112,12 @@ passport.deserializeUser((user: any, done) => {
   done(null, user);
 });
 
-// Routes
-app.use("/auth", authRoutes);
-app.use("/api", apiRoutes);
+// Routes with rate limiting
+app.use("/auth", authRateLimiter, authRoutes);
+app.use("/api", apiRateLimiter, apiRoutes);
+app.use("/api/admin", apiRateLimiter, adminRoutes);
+app.use("/api/immersion", apiRateLimiter, immersionRoutes);
+app.use("/api/moderation", apiRateLimiter, moderationRoutes);
 
 // Health check
 app.get("/health", (req, res) => {

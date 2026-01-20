@@ -6,6 +6,10 @@ import {
 } from "discord.js";
 import { prisma } from "../database/prisma";
 import { ACHIEVEMENTS, getAchievementById } from "../config/achievements";
+import {
+  parseSubscribedLanguages,
+  getSubscribedLanguagesDisplay,
+} from "../config/preferences";
 
 const RANK_TITLES = [
   { threshold: 5000, title: "Language Legend", emoji: "👑" },
@@ -77,6 +81,7 @@ export default {
 
       const achievements: string[] = JSON.parse(verifiedUser.achievements || "[]");
       const rank = getRankTitle(verifiedUser.totalTranslations);
+      const subscribedLanguages = parseSubscribedLanguages(verifiedUser.subscribedLanguages);
 
       // Get server rank
       const allUsers = await prisma.verifiedUser.findMany({
@@ -121,6 +126,11 @@ export default {
           {
             name: "🏆 Achievements",
             value: `**${achievements.length}** / ${ACHIEVEMENTS.length} unlocked`,
+            inline: true,
+          },
+          {
+            name: "🌍 Languages",
+            value: getSubscribedLanguagesDisplay(subscribedLanguages),
             inline: true,
           }
         );
