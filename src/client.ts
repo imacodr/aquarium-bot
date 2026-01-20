@@ -32,7 +32,7 @@ class CodrClient extends Client {
       if (item.isDirectory()) {
         // Recursively load commands from subdirectories
         this.loadCommands(itemPath);
-      } else if (item.name.endsWith(".js") || item.name.endsWith(".ts")) {
+      } else if (item.name.endsWith(".js") || (item.name.endsWith(".ts") && !item.name.endsWith(".d.ts"))) {
         const command = require(itemPath);
         if (command.default?.data?.name) {
           this.commands.set(command.default.data.name, command.default);
