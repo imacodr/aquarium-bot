@@ -78,7 +78,7 @@ const PgSession = connectPgSimple(session);
 const sessionStore = new PgSession({
   conString: process.env.DATABASE_URL,
   tableName: "session",
-  createTableIfMissing: false,
+  createTableIfMissing: true, // Auto-create if missing
   errorLog: (error) => {
     console.error("Session store error:", error);
   },
