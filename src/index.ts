@@ -48,6 +48,11 @@ app.post(
 
 app.use(express.json());
 
+// Trust proxy for production (Render, Railway, etc.)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // Session configuration
 app.use(
   session({
@@ -58,6 +63,7 @@ app.use(
       maxAge: SESSION_MAX_AGE,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      httpOnly: true,
     },
   })
 );
