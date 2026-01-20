@@ -149,6 +149,14 @@ function isValidUrl(urlString: string): boolean {
 }
 
 export function validateEnvAndExit(): void {
+  const isDev = process.env.NODE_ENV !== "production";
+
+  // Skip strict validation in development
+  if (isDev) {
+    console.log("🔧 Development mode - skipping strict environment validation");
+    return;
+  }
+
   const result = validateEnv();
 
   // Print warnings
