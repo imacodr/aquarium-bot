@@ -8,7 +8,7 @@ import {
 } from "discord.js";
 import { prisma } from "../../database/prisma";
 import { LANGUAGES } from "../../config/languages";
-import { IMMERSION_CATEGORY_NAME, IMMERSION_CHANNEL_SLOWMODE } from "../../config/constants";
+import { IMMERSION_CATEGORY_NAME, IMMERSION_CHANNEL_SLOWMODE, IMMERSION_INSTRUCTIONS_CHANNEL_NAME, IMMERSION_INSTRUCTIONS_TEXT } from "../../config/constants";
 import { webhookService } from "../../services/webhook";
 
 export default {
@@ -91,6 +91,18 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
       });
     }
 
+    // Create instructions channel first
+    const instructionsChannel = await interaction.guild.channels.create({
+      name: IMMERSION_INSTRUCTIONS_CHANNEL_NAME,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      topic: "How to verify and use the language immersion channels",
+      reason: "Language immersion setup",
+    });
+
+    // Post instructions message
+    await (instructionsChannel as TextChannel).send(IMMERSION_INSTRUCTIONS_TEXT);
+
     // Create channels and webhooks
     const channelData: Record<string, { channelId: string; webhookId: string; webhookToken: string }> = {};
 
@@ -117,6 +129,7 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
     const dbData = {
       guildId: interaction.guild.id,
       categoryId: category.id,
+      instructionsChannelId: instructionsChannel.id,
       englishChannelId: channelData.EN.channelId,
       englishWebhookId: channelData.EN.webhookId,
       englishWebhookToken: channelData.EN.webhookToken,
@@ -247,6 +260,7 @@ async function handleReset(interaction: ChatInputCommandInteraction) {
 
     // Delete channels
     const channelIds = [
+      config.instructionsChannelId,
       config.englishChannelId,
       config.spanishChannelId,
       config.portugueseChannelId,

@@ -11,6 +11,7 @@ model GuildConfig {
   id                String   @id @default(cuid())
   guildId           String   @unique
   categoryId        String?
+  instructionsChannelId String?
 
   // Channel IDs for each language
   englishChannelId    String?
