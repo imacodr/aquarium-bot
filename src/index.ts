@@ -104,11 +104,11 @@ passport.use(
   )
 );
 
-passport.serializeUser((user: any, done) => {
+passport.serializeUser((user: Express.User, done: (err: any, id?: Express.User) => void) => {
   done(null, user);
 });
 
-passport.deserializeUser((user: any, done) => {
+passport.deserializeUser((user: Express.User, done: (err: any, user?: Express.User | false | null) => void) => {
   done(null, user);
 });
 
