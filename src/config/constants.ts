@@ -12,7 +12,7 @@ export const USAGE_WARNING_THRESHOLD = 0.8; // Warn at 80% usage
 // URLs
 export const BASE_URL = process.env.BASE_URL || "http://localhost:4001";
 export const DASHBOARD_URL = process.env.DASHBOARD_URL || "http://localhost:3000";
-export const SUPPORT_SERVER_URL = process.env.SUPPORT_SERVER_URL || "https://discord.gg/aquarium";
+export const SUPPORT_SERVER_URL = process.env.SUPPORT_SERVER_URL || "https://discord.gg/SbA5ef57QZ";
 
 // OAuth2
 export const DISCORD_OAUTH_SCOPES = ["identify", "guilds"];
@@ -33,7 +33,7 @@ Welcome to the Language Immersion system! This feature allows you to chat with o
 **Step 1: Verify Your Account**
 Before you can use the language channels, you need to verify your account:
 
-1. Go to the bot's web dashboard
+1. Go to the bot's [web dashboard](${DASHBOARD_URL})
 2. Click "Login with Discord"
 3. Select this server and click "Verify"
 

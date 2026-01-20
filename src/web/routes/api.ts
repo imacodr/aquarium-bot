@@ -643,6 +643,7 @@ router.get("/guilds/:id/preferences", isAuthenticated, async (req: Request, res:
         subscribedLanguagesDisplay: getSubscribedLanguagesDisplay(subscribedLanguages),
         displayMode: verifiedUser.displayMode || "detailed",
         showOnLeaderboard: verifiedUser.showOnLeaderboard ?? true,
+        immersionEnabled: verifiedUser.immersionEnabled ?? true,
         dmNotificationsEnabled: verifiedUser.user?.dmNotificationsEnabled ?? true,
         nativeLanguage: verifiedUser.user?.nativeLanguage || null,
       },
@@ -658,7 +659,7 @@ router.patch("/guilds/:id/preferences", isAuthenticated, async (req: Request, re
   try {
     const guildId = req.params.id;
     const userId = req.user!.id;
-    const { subscribedLanguages, displayMode, showOnLeaderboard, dmNotificationsEnabled, nativeLanguage } = req.body;
+    const { subscribedLanguages, displayMode, showOnLeaderboard, immersionEnabled, dmNotificationsEnabled, nativeLanguage } = req.body;
 
     const verifiedUser = await prisma.verifiedUser.findUnique({
       where: {
@@ -700,6 +701,10 @@ router.patch("/guilds/:id/preferences", isAuthenticated, async (req: Request, re
       guildUpdateData.showOnLeaderboard = showOnLeaderboard;
     }
 
+    if (typeof immersionEnabled === "boolean") {
+      guildUpdateData.immersionEnabled = immersionEnabled;
+    }
+
     // Update guild-specific preferences
     if (Object.keys(guildUpdateData).length > 0) {
       await prisma.verifiedUser.update({
@@ -739,8 +744,8 @@ router.patch("/guilds/:id/preferences", isAuthenticated, async (req: Request, re
       });
     }
 
-    // Update channel permissions if subscribedLanguages changed
-    if (guildUpdateData.subscribedLanguages !== undefined) {
+    // Update channel permissions if subscribedLanguages or immersionEnabled changed
+    if (guildUpdateData.subscribedLanguages !== undefined || guildUpdateData.immersionEnabled !== undefined) {
       const guildConfig = await prisma.guildConfig.findUnique({
         where: { guildId },
       });
@@ -749,13 +754,31 @@ router.patch("/guilds/:id/preferences", isAuthenticated, async (req: Request, re
         const guild = client.guilds.cache.get(guildId);
         if (guild) {
           const { channelPermissionService } = await import("../../services/channelPermissions");
-          const languages = JSON.parse(guildUpdateData.subscribedLanguages);
-          await channelPermissionService.updateUserChannelAccess(
-            guild,
-            userId,
-            languages,
-            guildConfig
-          );
+
+          // Get the updated user to check immersionEnabled status
+          const updatedUser = await prisma.verifiedUser.findUnique({
+            where: {
+              discordId_guildId: {
+                discordId: userId,
+                guildId,
+              },
+            },
+          });
+
+          if (updatedUser) {
+            // If immersion is disabled, remove all channel access
+            // If enabled, set access based on subscribedLanguages
+            const languages = updatedUser.immersionEnabled
+              ? JSON.parse(updatedUser.subscribedLanguages || "[]")
+              : []; // Empty array = no access to any channels
+
+            await channelPermissionService.updateUserChannelAccess(
+              guild,
+              userId,
+              languages,
+              guildConfig
+            );
+          }
         }
       }
     }

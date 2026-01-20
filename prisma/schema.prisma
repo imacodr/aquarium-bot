@@ -98,6 +98,9 @@ model VerifiedUser {
   // Privacy
   showOnLeaderboard     Boolean  @default(true)
 
+  // Immersion access toggle - allows users to opt out while remaining verified
+  immersionEnabled      Boolean  @default(true)
+
   verifiedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

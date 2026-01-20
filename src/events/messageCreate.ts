@@ -95,6 +95,28 @@ export async function handleMessageCreate(message: Message): Promise<void> {
       return;
     }
 
+    // Check if user has disabled their immersion access
+    if (!verifiedUser.immersionEnabled) {
+      // Delete message silently - user has opted out
+      await message.delete().catch(() => {});
+
+      const disabledEmbed = new EmbedBuilder()
+        .setColor(0x6b7280)
+        .setTitle("Immersion Disabled")
+        .setDescription(
+          `You have disabled your language immersion access in **${message.guild.name}**.\n\n` +
+          `To re-enable, visit the [dashboard](${DASHBOARD_URL}) and toggle your immersion settings.`
+        )
+        .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() || undefined });
+
+      try {
+        await message.author.send({ embeds: [disabledEmbed] });
+      } catch {
+        // Silently ignore if DMs are disabled
+      }
+      return;
+    }
+
     // Check if user is banned from immersion
     const banStatus = await moderationService.getBanStatus(
       message.guild.id,

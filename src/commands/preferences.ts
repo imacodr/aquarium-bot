@@ -90,6 +90,22 @@ export default {
             )
         )
     )
+    .addSubcommandGroup((group) =>
+      group
+        .setName("immersion")
+        .setDescription("Language immersion access")
+        .addSubcommand((sub) =>
+          sub
+            .setName("toggle")
+            .setDescription("Enable or disable your access to language immersion channels")
+            .addBooleanOption((option) =>
+              option
+                .setName("enabled")
+                .setDescription("Enable language immersion access?")
+                .setRequired(true)
+            )
+        )
+    )
     .addSubcommand((sub) =>
       sub.setName("view").setDescription("View all your current preferences")
     ),
@@ -126,6 +142,10 @@ export default {
     } else if (subcommandGroup === "notifications") {
       if (subcommand === "toggle") {
         return handleNotificationsToggle(interaction);
+      }
+    } else if (subcommandGroup === "immersion") {
+      if (subcommand === "toggle") {
+        return handleImmersionToggle(interaction);
       }
     } else if (subcommand === "view") {
       return handleViewAll(interaction);
@@ -168,6 +188,11 @@ async function handleViewAll(interaction: ChatInputCommandInteraction) {
       .setTitle("Your Preferences")
       .setThumbnail(interaction.user.displayAvatarURL({ size: 64 }))
       .addFields(
+        {
+          name: "Immersion Access",
+          value: verifiedUser.immersionEnabled !== false ? "✅ Enabled" : "❌ Disabled",
+          inline: false,
+        },
         {
           name: "Language Subscriptions",
           value: getSubscribedLanguagesDisplay(subscribedLanguages),
@@ -585,6 +610,77 @@ async function handleNotificationsToggle(interaction: ChatInputCommandInteractio
     console.error("Error updating notification preferences:", error);
     return interaction.editReply({
       content: "An error occurred while updating your notification settings.",
+    });
+  }
+}
+
+async function handleImmersionToggle(interaction: ChatInputCommandInteraction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const verifiedUser = await prisma.verifiedUser.findUnique({
+      where: {
+        discordId_guildId: {
+          discordId: interaction.user.id,
+          guildId: interaction.guild!.id,
+        },
+      },
+    });
+
+    if (!verifiedUser) {
+      return interaction.editReply({
+        content: "You need to verify your account first! Visit the dashboard to get started.",
+      });
+    }
+
+    const enabled = interaction.options.getBoolean("enabled", true);
+
+    // Update immersion status
+    await prisma.verifiedUser.update({
+      where: {
+        discordId_guildId: {
+          discordId: interaction.user.id,
+          guildId: interaction.guild!.id,
+        },
+      },
+      data: {
+        immersionEnabled: enabled,
+      },
+    });
+
+    // Update channel permissions
+    const guildConfig = await prisma.guildConfig.findUnique({
+      where: { guildId: interaction.guild!.id },
+    });
+
+    if (guildConfig) {
+      // If disabling, remove all channel access
+      // If enabling, restore based on subscribedLanguages
+      const languages = enabled
+        ? parseSubscribedLanguages(verifiedUser.subscribedLanguages)
+        : []; // Empty = no access
+
+      await channelPermissionService.updateUserChannelAccess(
+        interaction.guild!,
+        interaction.user.id,
+        languages,
+        guildConfig
+      );
+    }
+
+    if (enabled) {
+      return interaction.editReply({
+        content: "✅ **Language immersion access enabled!**\n\nYou can now use the language immersion channels and your messages will be translated.",
+      });
+    } else {
+      return interaction.editReply({
+        content: "❌ **Language immersion access disabled.**\n\nYou will no longer be able to chat in or see language immersion channels. You are still verified and can re-enable access at any time using `/preferences immersion toggle` or via the dashboard.",
+      });
+    }
+  } catch (error) {
+    console.error("Error updating immersion access:", error);
+    return interaction.editReply({
+      content: "An error occurred while updating your immersion settings.",
     });
   }
 }
