@@ -85,7 +85,11 @@ export const LANGUAGES: Record<string, Language> = {
 export const LANGUAGE_CODES = Object.keys(LANGUAGES);
 
 export function getLanguageByChannelName(channelName: string): Language | undefined {
-  return Object.values(LANGUAGES).find((lang) => lang.channelName === channelName);
+  // Handle both formats: "english" and "🇺🇸︱english"
+  const normalizedName = channelName.includes("︱")
+    ? channelName.split("︱").pop()
+    : channelName;
+  return Object.values(LANGUAGES).find((lang) => lang.channelName === normalizedName);
 }
 
 export function getLanguageByCode(code: string): Language | undefined {

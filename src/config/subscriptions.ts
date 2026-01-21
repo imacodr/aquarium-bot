@@ -100,7 +100,7 @@ export const USER_SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     id: "pro",
     name: "Pro",
     description: "Higher limits on any server you use",
-    price: 999, // $9.99/month
+    price: 499, // $4.99/month
     limits: {
       perUser: 25000,
       perGuild: 0,
@@ -116,7 +116,7 @@ export const USER_SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     id: "premium",
     name: "Premium",
     description: "Maximum limits for power users",
-    price: 2499, // $24.99/month
+    price: 1249, // $12.49/month
     limits: {
       perUser: 100000,
       perGuild: 0,

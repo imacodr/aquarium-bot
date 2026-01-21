@@ -167,7 +167,7 @@ class ImmersionManagerService {
 
       for (const [code, lang] of Object.entries(LANGUAGES)) {
         const channel = await guild.channels.create({
-          name: lang.channelName,
+          name: `${lang.emoji}︱${lang.channelName}`,
           type: ChannelType.GuildText,
           parent: category.id,
           topic: `${lang.emoji} ${lang.name} - Language immersion channel. Messages here will be translated to other language channels.`,
@@ -657,7 +657,7 @@ class ImmersionManagerService {
           if (!channel && isEnabled) {
             // Recreate the channel
             const newChannel = await guild.channels.create({
-              name: lang.channelName,
+              name: `${lang.emoji}︱${lang.channelName}`,
               type: ChannelType.GuildText,
               parent: config.categoryId,
               topic: `${lang.emoji} ${lang.name} - Language immersion channel. Messages here will be translated to other language channels.`,
