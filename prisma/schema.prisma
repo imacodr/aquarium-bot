@@ -51,6 +51,9 @@ model GuildConfig {
   enabledLanguages      String   @default("[]")
   disabledCategoryId    String?  // Category for disabled language channels
 
+  // Permission settings
+  useCustomPermissions  Boolean @default(false)
+
   // Usage tracking
   monthlyCharacterUsage Int      @default(0)
   usageResetDate        DateTime @default(now())
@@ -64,8 +67,9 @@ model GuildConfig {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  verifiedUsers VerifiedUser[]
-  usageLogs     UsageLog[]
+  verifiedUsers        VerifiedUser[]
+  usageLogs            UsageLog[]
+  commandPermissions   CommandPermission[]
 }
 
 model VerifiedUser {
@@ -244,4 +248,22 @@ model User {
   updatedAt DateTime @updatedAt
 
   verifiedUsers VerifiedUser[]
+}
+
+// Command permission overrides for guild admins
+model CommandPermission {
+  id           String   @id @default(cuid())
+  guildId      String
+  commandGroup String   // "mod" | "mod.ban" | "immersion.setup" etc.
+  roleId       String?  // Discord role ID
+  userId       String?  // Discord user ID
+  permission   String   @default("allow")  // "allow" | "deny"
+  createdAt    DateTime @default(now())
+  createdBy    String   // Admin who created this
+
+  guildConfig  GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, commandGroup, roleId])
+  @@unique([guildId, commandGroup, userId])
+  @@index([guildId])
 }

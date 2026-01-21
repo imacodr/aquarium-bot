@@ -4,9 +4,12 @@ import {
   PermissionFlagsBits,
   EmbedBuilder,
   User,
+  GuildMember,
 } from "discord.js";
 import { moderationService } from "../services/moderation";
 import { prisma } from "../database/prisma";
+import { permissionService } from "../services/permissions";
+import { SUBCOMMAND_TO_GROUP, CommandGroup } from "../types/permissions";
 
 const COLORS = {
   BAN: 0xef4444,
@@ -192,6 +195,18 @@ async function execute(interaction: ChatInputCommandInteraction) {
   }
 
   const subcommand = interaction.options.getSubcommand();
+  const member = interaction.member as GuildMember;
+
+  // Check custom permissions
+  const commandGroup = SUBCOMMAND_TO_GROUP[subcommand] || 'mod' as CommandGroup;
+  const permResult = await permissionService.checkPermission(member, commandGroup);
+
+  if (!permResult.allowed) {
+    return interaction.reply({
+      content: "You do not have permission to use this command.",
+      ephemeral: true,
+    });
+  }
 
   switch (subcommand) {
     case "ban":

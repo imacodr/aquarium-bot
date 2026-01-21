@@ -5,11 +5,14 @@ import {
   ChannelType,
   TextChannel,
   CategoryChannel,
+  GuildMember,
 } from "discord.js";
 import { prisma } from "../../database/prisma";
 import { LANGUAGES } from "../../config/languages";
 import { IMMERSION_CATEGORY_NAME, IMMERSION_CHANNEL_SLOWMODE, IMMERSION_INSTRUCTIONS_CHANNEL_NAME, IMMERSION_INSTRUCTIONS_TEXT } from "../../config/constants";
 import { webhookService } from "../../services/webhook";
+import { permissionService } from "../../services/permissions";
+import { CommandGroup } from "../../types/permissions";
 
 export default {
   data: new SlashCommandBuilder()
@@ -36,7 +39,34 @@ export default {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction) {
+    if (!interaction.guild) {
+      return interaction.reply({
+        content: "This command can only be used in a server.",
+        ephemeral: true,
+      });
+    }
+
     const subcommand = interaction.options.data[0]?.name;
+    const member = interaction.member as GuildMember;
+
+    // Determine command group based on subcommand
+    let commandGroup: CommandGroup;
+    if (subcommand === "status") {
+      commandGroup = "immersion.status";
+    } else {
+      // setup and reset require immersion.setup permission
+      commandGroup = "immersion.setup";
+    }
+
+    // Check custom permissions
+    const permResult = await permissionService.checkPermission(member, commandGroup);
+
+    if (!permResult.allowed) {
+      return interaction.reply({
+        content: "You do not have permission to use this command.",
+        ephemeral: true,
+      });
+    }
 
     switch (subcommand) {
       case "setup":

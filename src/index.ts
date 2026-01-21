@@ -17,6 +17,7 @@ import apiRoutes from "./web/routes/api";
 import adminRoutes from "./web/routes/admin";
 import immersionRoutes from "./web/routes/immersion";
 import moderationRoutes from "./web/routes/moderation";
+import permissionsRoutes from "./web/routes/permissions";
 import {
   BASE_URL,
   DASHBOARD_URL,
@@ -141,6 +142,7 @@ app.use("/api", apiRateLimiter, apiRoutes);
 app.use("/api/admin", apiRateLimiter, adminRoutes);
 app.use("/api/immersion", apiRateLimiter, immersionRoutes);
 app.use("/api/moderation", apiRateLimiter, moderationRoutes);
+app.use("/api/permissions", apiRateLimiter, permissionsRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
