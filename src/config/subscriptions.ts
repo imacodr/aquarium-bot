@@ -18,13 +18,13 @@ export const SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     description: "Perfect for trying out language immersion",
     price: 0,
     limits: {
-      perUser: 5000,
-      perGuild: 25000,
+      perUser: 10000,
+      perGuild: 50000,
     },
     features: [
       "9 language channels",
-      "5,000 characters/user/month",
-      "25,000 characters/server/month",
+      "10,000 characters/user/month",
+      "50,000 characters/server/month",
       "Basic translation",
     ],
   },
@@ -34,13 +34,13 @@ export const SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     description: "For active language learning communities",
     price: 999, // $9.99/month
     limits: {
-      perUser: 25000,
-      perGuild: 150000,
+      perUser: 50000,
+      perGuild: 250000,
     },
     features: [
       "Everything in Free",
-      "25,000 characters/user/month",
-      "150,000 characters/server/month",
+      "50,000 characters/user/month",
+      "250,000 characters/server/month",
       "Priority support",
       "Usage analytics",
     ],
@@ -51,13 +51,13 @@ export const SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     description: "For large servers with high translation needs",
     price: 2499, // $24.99/month
     limits: {
-      perUser: 100000,
-      perGuild: 500000,
+      perUser: 150000,
+      perGuild: 750000,
     },
     features: [
       "Everything in Pro",
-      "100,000 characters/user/month",
-      "500,000 characters/server/month",
+      "150,000 characters/user/month",
+      "750,000 characters/server/month",
       "Custom branding",
       "API access",
       "Dedicated support",
@@ -87,11 +87,11 @@ export const USER_SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     description: "Basic access across all servers",
     price: 0,
     limits: {
-      perUser: 5000,
+      perUser: 10000,
       perGuild: 0, // Not applicable for user tiers
     },
     features: [
-      "5,000 characters/month across all servers",
+      "10,000 characters/month across all servers",
       "Basic translation",
     ],
     isUserTier: true,
@@ -102,11 +102,11 @@ export const USER_SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     description: "Higher limits on any server you use",
     price: 499, // $4.99/month
     limits: {
-      perUser: 25000,
+      perUser: 50000,
       perGuild: 0,
     },
     features: [
-      "25,000 characters/month across all servers",
+      "50,000 characters/month across all servers",
       "Priority support",
       "Works on any server with Aquarium",
     ],
@@ -118,11 +118,11 @@ export const USER_SUBSCRIPTION_TIERS: Record<string, SubscriptionTier> = {
     description: "Maximum limits for power users",
     price: 1249, // $12.49/month
     limits: {
-      perUser: 100000,
+      perUser: 150000,
       perGuild: 0,
     },
     features: [
-      "100,000 characters/month across all servers",
+      "150,000 characters/month across all servers",
       "Dedicated support",
       "Works on any server with Aquarium",
       "Early access to new features",

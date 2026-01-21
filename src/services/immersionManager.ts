@@ -190,6 +190,27 @@ class ImmersionManagerService {
         });
       }
 
+      // Check for preserved usage from tracker (prevents reset abuse)
+      const tracker = await prisma.guildUsageTracker.findUnique({
+        where: { guildId },
+      });
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Restore usage if tracker exists and is from current month
+      let monthlyCharacterUsage = 0;
+      let usageResetDate = now;
+
+      if (tracker) {
+        // Check if tracker usage is from current month
+        if (tracker.usageResetDate >= startOfMonth) {
+          monthlyCharacterUsage = tracker.monthlyCharacterUsage;
+          usageResetDate = tracker.usageResetDate;
+        }
+        // If tracker is from a previous month, usage resets naturally
+      }
+
       // Save to database
       const dbData = {
         guildId,
@@ -222,6 +243,9 @@ class ImmersionManagerService {
         chineseChannelId: channelData.ZH.channelId,
         chineseWebhookId: channelData.ZH.webhookId,
         chineseWebhookToken: channelData.ZH.webhookToken,
+        // Restore preserved usage
+        monthlyCharacterUsage,
+        usageResetDate,
       };
 
       await prisma.guildConfig.upsert({
@@ -304,6 +328,20 @@ class ImmersionManagerService {
             dbData.categoryId = channel.parentId;
           }
         }
+      }
+
+      // Check for preserved usage from tracker (prevents reset abuse)
+      const tracker = await prisma.guildUsageTracker.findUnique({
+        where: { guildId },
+      });
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Restore usage if tracker exists and is from current month
+      if (tracker && tracker.usageResetDate >= startOfMonth) {
+        dbData.monthlyCharacterUsage = tracker.monthlyCharacterUsage;
+        dbData.usageResetDate = tracker.usageResetDate;
       }
 
       await prisma.guildConfig.upsert({
@@ -423,6 +461,7 @@ class ImmersionManagerService {
 
   /**
    * Reset immersion setup (delete channels and config)
+   * Usage data is preserved in GuildUsageTracker to prevent abuse
    */
   async reset(guildId: string, deleteChannels: boolean = true): Promise<{ success: boolean; error?: string }> {
     const guild = client.guilds.cache.get(guildId);
@@ -438,6 +477,62 @@ class ImmersionManagerService {
       if (!config) {
         return { success: false, error: "Immersion not set up" };
       }
+
+      // Check reset cooldown - prevent abuse by limiting resets
+      const tracker = await prisma.guildUsageTracker.findUnique({
+        where: { guildId },
+      });
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      if (tracker) {
+        // Reset the reset counter if we're in a new month
+        const resetCountNeedsReset = tracker.resetCountResetDate < startOfMonth;
+        const currentResetCount = resetCountNeedsReset ? 0 : tracker.resetCount;
+
+        // Allow max 2 resets per month
+        if (currentResetCount >= 2) {
+          return {
+            success: false,
+            error: "Reset limit reached. You can only reset immersion twice per month to prevent abuse."
+          };
+        }
+
+        // Cooldown: 24 hours between resets
+        if (tracker.lastResetAt) {
+          const hoursSinceLastReset = (now.getTime() - tracker.lastResetAt.getTime()) / (1000 * 60 * 60);
+          if (hoursSinceLastReset < 24) {
+            const hoursRemaining = Math.ceil(24 - hoursSinceLastReset);
+            return {
+              success: false,
+              error: `Please wait ${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''} before resetting again.`
+            };
+          }
+        }
+      }
+
+      // Save usage to persistent tracker before deleting config
+      await prisma.guildUsageTracker.upsert({
+        where: { guildId },
+        create: {
+          guildId,
+          monthlyCharacterUsage: config.monthlyCharacterUsage,
+          usageResetDate: config.usageResetDate,
+          lastResetAt: now,
+          resetCount: 1,
+          resetCountResetDate: startOfMonth,
+        },
+        update: {
+          monthlyCharacterUsage: config.monthlyCharacterUsage,
+          usageResetDate: config.usageResetDate,
+          lastResetAt: now,
+          resetCount: tracker && tracker.resetCountResetDate >= startOfMonth
+            ? tracker.resetCount + 1
+            : 1,
+          resetCountResetDate: startOfMonth,
+        },
+      });
 
       if (deleteChannels) {
         // Delete all language channels and instructions channel

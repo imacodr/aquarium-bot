@@ -49,14 +49,25 @@ app.post(
   "/webhooks/stripe",
   express.raw({ type: "application/json" }),
   async (req, res) => {
+    console.log("[Webhook] Stripe webhook received");
     const signature = req.headers["stripe-signature"] as string;
 
+    if (!signature) {
+      console.error("[Webhook] No stripe-signature header found");
+      return res.status(400).json({ error: "No signature" });
+    }
+
     try {
+      console.log("[Webhook] Verifying signature...");
       const event = constructWebhookEvent(req.body, signature);
+      console.log(`[Webhook] Signature verified, event type: ${event.type}`);
+
       await stripeService.handleWebhookEvent(event);
+      console.log(`[Webhook] Event ${event.type} processed successfully`);
       res.json({ received: true });
     } catch (error: any) {
-      console.error("Webhook error:", error.message);
+      console.error("[Webhook] Error:", error.message);
+      console.error("[Webhook] Full error:", error);
       // Don't expose internal error details to clients
       res.status(400).json({ error: "Webhook processing failed" });
     }

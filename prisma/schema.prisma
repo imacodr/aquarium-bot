@@ -250,6 +250,24 @@ model User {
   verifiedUsers VerifiedUser[]
 }
 
+// Persistent usage tracker - survives guild config resets to prevent abuse
+model GuildUsageTracker {
+  id                    String   @id @default(cuid())
+  guildId               String   @unique
+
+  // Usage tracking (persists across resets)
+  monthlyCharacterUsage Int      @default(0)
+  usageResetDate        DateTime @default(now())
+
+  // Reset abuse prevention
+  lastResetAt           DateTime?
+  resetCount            Int      @default(0) // Total resets this month
+  resetCountResetDate   DateTime @default(now()) // When to reset the reset count
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Command permission overrides for guild admins
 model CommandPermission {
   id           String   @id @default(cuid())

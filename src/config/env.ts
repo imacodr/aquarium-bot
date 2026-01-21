@@ -51,6 +51,8 @@ const STRIPE_VARS = [
   "STRIPE_WEBHOOK_SECRET",
   "STRIPE_PRO_PRICE_ID",
   "STRIPE_PREMIUM_PRICE_ID",
+  "STRIPE_USER_PRO_PRICE_ID",
+  "STRIPE_USER_PREMIUM_PRICE_ID",
 ] as const;
 
 export function validateEnv(): ValidationResult {

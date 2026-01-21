@@ -149,30 +149,45 @@ class StripeServiceImpl implements StripeService {
   }
 
   async handleWebhookEvent(event: Stripe.Event): Promise<void> {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await this.handleCheckoutComplete(session);
-        break;
-      }
+    console.log(`[Stripe Webhook] Received event: ${event.type}`);
 
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionUpdate(subscription);
-        break;
-      }
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          console.log(`[Stripe Webhook] Checkout completed, session ID: ${session.id}`);
+          console.log(`[Stripe Webhook] Session metadata:`, session.metadata);
+          await this.handleCheckoutComplete(session);
+          break;
+        }
 
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionCanceled(subscription);
-        break;
-      }
+        case "customer.subscription.updated": {
+          const subscription = event.data.object as Stripe.Subscription;
+          console.log(`[Stripe Webhook] Subscription updated: ${subscription.id}`);
+          await this.handleSubscriptionUpdate(subscription);
+          break;
+        }
 
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        await this.handlePaymentFailed(invoice);
-        break;
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Stripe.Subscription;
+          console.log(`[Stripe Webhook] Subscription deleted: ${subscription.id}`);
+          await this.handleSubscriptionCanceled(subscription);
+          break;
+        }
+
+        case "invoice.payment_failed": {
+          const invoice = event.data.object as Stripe.Invoice;
+          console.log(`[Stripe Webhook] Payment failed for invoice: ${invoice.id}`);
+          await this.handlePaymentFailed(invoice);
+          break;
+        }
+
+        default:
+          console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
       }
+    } catch (error) {
+      console.error(`[Stripe Webhook] Error processing ${event.type}:`, error);
+      throw error; // Re-throw to return 400 to Stripe
     }
   }
 
@@ -180,25 +195,51 @@ class StripeServiceImpl implements StripeService {
     const subscriptionType = session.metadata?.subscriptionType;
     const tier = session.metadata?.tier as "pro" | "premium";
 
+    console.log(`[Stripe] handleCheckoutComplete - subscriptionType: ${subscriptionType}, tier: ${tier}`);
+
     if (!tier) {
-      console.error("Missing tier in checkout session metadata");
+      console.error("[Stripe] Missing tier in checkout session metadata. Full metadata:", JSON.stringify(session.metadata));
       return;
     }
 
     // Get subscription details
     const subscriptionId = session.subscription as string;
+    if (!subscriptionId) {
+      console.error("[Stripe] No subscription ID in checkout session");
+      return;
+    }
+
+    console.log(`[Stripe] Retrieving subscription: ${subscriptionId}`);
     const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-    const currentPeriodEnd = (subscription as any).current_period_end as number;
+
+    console.log(`[Stripe] Subscription object:`, JSON.stringify(subscription, null, 2));
+
+    // Handle both possible formats - direct number or nested object
+    const subData = subscription as any;
+    let currentPeriodEnd: number;
+    if (typeof subData.current_period_end === 'number') {
+      currentPeriodEnd = subData.current_period_end;
+    } else if (subData.current_period_end) {
+      currentPeriodEnd = Number(subData.current_period_end);
+    } else {
+      // Fallback: set to 30 days from now
+      console.warn(`[Stripe] No current_period_end found, using 30 day default`);
+      currentPeriodEnd = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60);
+    }
+
+    console.log(`[Stripe] Subscription period ends: ${currentPeriodEnd} -> ${new Date(currentPeriodEnd * 1000).toISOString()}`);
 
     if (subscriptionType === "user") {
       // Handle user subscription
       const discordId = session.metadata?.discordId;
       if (!discordId) {
-        console.error("Missing discordId in user checkout session");
+        console.error("[Stripe] Missing discordId in user checkout session metadata");
         return;
       }
 
-      await prisma.user.update({
+      console.log(`[Stripe] Updating user subscription for discordId: ${discordId}`);
+
+      const updatedUser = await prisma.user.update({
         where: { discordId },
         data: {
           subscriptionTier: tier,
@@ -207,16 +248,18 @@ class StripeServiceImpl implements StripeService {
         },
       });
 
-      console.log(`User subscription activated for ${discordId}: ${tier}`);
+      console.log(`[Stripe] User subscription activated for ${discordId}: ${tier}`, updatedUser);
     } else {
       // Handle guild subscription (default behavior)
       const guildId = session.metadata?.guildId;
       if (!guildId) {
-        console.error("Missing guildId in guild checkout session");
+        console.error("[Stripe] Missing guildId in guild checkout session metadata");
         return;
       }
 
-      await prisma.guildConfig.update({
+      console.log(`[Stripe] Updating guild subscription for guildId: ${guildId}`);
+
+      const updatedGuild = await prisma.guildConfig.update({
         where: { guildId },
         data: {
           subscriptionTier: tier,
@@ -225,7 +268,7 @@ class StripeServiceImpl implements StripeService {
         },
       });
 
-      console.log(`Guild subscription activated for ${guildId}: ${tier}`);
+      console.log(`[Stripe] Guild subscription activated for ${guildId}: ${tier}`, updatedGuild);
     }
   }
 

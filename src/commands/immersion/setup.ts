@@ -13,6 +13,7 @@ import { IMMERSION_CATEGORY_NAME, IMMERSION_CHANNEL_SLOWMODE, IMMERSION_INSTRUCT
 import { webhookService } from "../../services/webhook";
 import { permissionService } from "../../services/permissions";
 import { CommandGroup } from "../../types/permissions";
+import { getTierLimits } from "../../config/subscriptions";
 
 export default {
   data: new SlashCommandBuilder()
@@ -155,6 +156,23 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
       };
     }
 
+    // Check for preserved usage from tracker (prevents reset abuse)
+    const tracker = await prisma.guildUsageTracker.findUnique({
+      where: { guildId: interaction.guild.id },
+    });
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Restore usage if tracker exists and is from current month
+    let monthlyCharacterUsage = 0;
+    let usageResetDate = now;
+
+    if (tracker && tracker.usageResetDate >= startOfMonth) {
+      monthlyCharacterUsage = tracker.monthlyCharacterUsage;
+      usageResetDate = tracker.usageResetDate;
+    }
+
     // Save to database
     const dbData = {
       guildId: interaction.guild.id,
@@ -187,6 +205,9 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
       chineseChannelId: channelData.ZH.channelId,
       chineseWebhookId: channelData.ZH.webhookId,
       chineseWebhookToken: channelData.ZH.webhookToken,
+      // Restore preserved usage
+      monthlyCharacterUsage,
+      usageResetDate,
     };
 
     await prisma.guildConfig.upsert({
@@ -254,10 +275,11 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
       .map((c) => `<#${c.id}>`)
       .join(" ");
 
-    const usagePercent = ((config.monthlyCharacterUsage / 25000) * 100).toFixed(1);
+    const guildLimits = getTierLimits(config.subscriptionTier);
+    const usagePercent = ((config.monthlyCharacterUsage / guildLimits.perGuild) * 100).toFixed(1);
 
     return interaction.editReply({
-      content: `**Language Immersion Status**\n\n**Channels:**\n${channels}\n\n**Verified Users:** ${config.verifiedUsers.length}\n**Total Translations:** ${config._count.usageLogs}\n**Monthly Usage:** ${config.monthlyCharacterUsage.toLocaleString()} / 25,000 characters (${usagePercent}%)`,
+      content: `**Language Immersion Status**\n\n**Channels:**\n${channels}\n\n**Verified Users:** ${config.verifiedUsers.length}\n**Total Translations:** ${config._count.usageLogs}\n**Monthly Usage:** ${config.monthlyCharacterUsage.toLocaleString()} / ${guildLimits.perGuild.toLocaleString()} characters (${usagePercent}%)`,
     });
   } catch (error) {
     console.error("Error getting status:", error);
@@ -278,67 +300,18 @@ async function handleReset(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    const config = await prisma.guildConfig.findUnique({
-      where: { guildId: interaction.guild.id },
-    });
+    // Use immersionManager which has cooldown and usage preservation logic
+    const { immersionManager } = await import("../../services/immersionManager");
+    const result = await immersionManager.reset(interaction.guild.id, true);
 
-    if (!config) {
+    if (!result.success) {
       return interaction.editReply({
-        content: "Language immersion is not set up.",
+        content: result.error || "Failed to reset immersion.",
       });
     }
 
-    // Delete channels
-    const channelIds = [
-      config.instructionsChannelId,
-      config.englishChannelId,
-      config.spanishChannelId,
-      config.portugueseChannelId,
-      config.frenchChannelId,
-      config.germanChannelId,
-      config.italianChannelId,
-      config.japaneseChannelId,
-      config.koreanChannelId,
-      config.chineseChannelId,
-    ].filter(Boolean) as string[];
-
-    for (const channelId of channelIds) {
-      try {
-        const channel = await interaction.guild.channels.fetch(channelId);
-        if (channel) {
-          await channel.delete("Language immersion reset");
-        }
-      } catch (e) {
-        // Channel may already be deleted
-      }
-    }
-
-    // Delete category if it was created by us
-    if (config.categoryId) {
-      try {
-        const category = await interaction.guild.channels.fetch(config.categoryId);
-        if (category && category.type === ChannelType.GuildCategory) {
-          // Only delete if empty
-          const categoryChannel = category as CategoryChannel;
-          if (categoryChannel.children.cache.size === 0) {
-            await category.delete("Language immersion reset");
-          }
-        }
-      } catch (e) {
-        // Category may already be deleted
-      }
-    }
-
-    // Delete database record
-    await prisma.guildConfig.delete({
-      where: { guildId: interaction.guild.id },
-    });
-
-    // Clear webhook cache
-    webhookService.clearCache();
-
     return interaction.editReply({
-      content: "Language immersion has been reset. All channels and data have been removed.",
+      content: "Language immersion has been reset. All channels and data have been removed.\n\n*Note: Your usage history is preserved - resetting does not restore your monthly limit.*",
     });
   } catch (error) {
     console.error("Error resetting immersion:", error);
