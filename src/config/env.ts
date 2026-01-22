@@ -20,6 +20,9 @@ interface EnvConfig {
   GUILDID?: string;
   COOKIE_DOMAIN?: string;
 
+  // Bot developer IDs (comma-separated Discord user IDs)
+  BOT_DEVELOPER_IDS?: string;
+
   // Stripe (optional but validated if present)
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;

@@ -244,6 +244,9 @@ model User {
   // Master DM toggle
   dmNotificationsEnabled  Boolean  @default(true)
 
+  // Bot developer flag
+  isBotDeveloper          Boolean  @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -284,4 +287,35 @@ model CommandPermission {
   @@unique([guildId, commandGroup, roleId])
   @@unique([guildId, commandGroup, userId])
   @@index([guildId])
+}
+
+// Bot developer audit log for tracking administrative actions
+model DeveloperAuditLog {
+  id          String   @id @default(cuid())
+  developerId String
+  action      String   // "announcement", "subscription_update", etc.
+  targetType  String   // "guild", "user", "global"
+  targetId    String?
+  details     String   // JSON string with additional details
+  createdAt   DateTime @default(now())
+
+  @@index([developerId])
+  @@index([createdAt])
+}
+
+// Announcement system for bot developers
+model Announcement {
+  id          String    @id @default(cuid())
+  developerId String
+  type        String    // "server_owners", "all_servers", "verified_users"
+  title       String
+  content     String
+  status      String    @default("pending") // pending, sending, completed, failed
+  targetCount Int       @default(0)
+  sentCount   Int       @default(0)
+  failedCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([status])
 }
