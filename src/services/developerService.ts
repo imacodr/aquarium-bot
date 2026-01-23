@@ -649,6 +649,122 @@ export async function getAuditLog(options: {
   };
 }
 
+/**
+ * Reset a guild's configuration to defaults
+ * Preserves subscription info and usage tracking
+ */
+export async function resetGuildConfig(
+  guildId: string,
+  developerId?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const config = await prisma.guildConfig.findUnique({
+      where: { guildId },
+    });
+
+    if (!config) {
+      return { success: false, error: "Guild configuration not found" };
+    }
+
+    // Ensure usage is synced to GuildUsageTracker before reset
+    await prisma.guildUsageTracker.upsert({
+      where: { guildId },
+      create: {
+        guildId,
+        monthlyCharacterUsage: config.monthlyCharacterUsage,
+        usageResetDate: config.usageResetDate,
+        lastResetAt: new Date(),
+        resetCount: 1,
+      },
+      update: {
+        monthlyCharacterUsage: config.monthlyCharacterUsage,
+        usageResetDate: config.usageResetDate,
+        lastResetAt: new Date(),
+        resetCount: { increment: 1 },
+      },
+    });
+
+    // Reset configuration fields while preserving subscription and usage
+    await prisma.guildConfig.update({
+      where: { guildId },
+      data: {
+        // Reset immersion setup
+        categoryId: null,
+        instructionsChannelId: null,
+
+        // Reset all language channels
+        englishChannelId: null,
+        spanishChannelId: null,
+        portugueseChannelId: null,
+        frenchChannelId: null,
+        germanChannelId: null,
+        italianChannelId: null,
+        japaneseChannelId: null,
+        koreanChannelId: null,
+        chineseChannelId: null,
+
+        // Reset all webhooks
+        englishWebhookId: null,
+        englishWebhookToken: null,
+        spanishWebhookId: null,
+        spanishWebhookToken: null,
+        portugueseWebhookId: null,
+        portugueseWebhookToken: null,
+        frenchWebhookId: null,
+        frenchWebhookToken: null,
+        germanWebhookId: null,
+        germanWebhookToken: null,
+        italianWebhookId: null,
+        italianWebhookToken: null,
+        japaneseWebhookId: null,
+        japaneseWebhookToken: null,
+        koreanWebhookId: null,
+        koreanWebhookToken: null,
+        chineseWebhookId: null,
+        chineseWebhookToken: null,
+
+        // Reset moderation settings
+        modLogChannelId: null,
+
+        // Reset language settings
+        enabledLanguages: "[]",
+        disabledCategoryId: null,
+
+        // Reset permission settings
+        useCustomPermissions: false,
+
+        // Note: subscription info (subscriptionTier, subscriptionExpiresAt, stripeCustomerId, stripeSubscriptionId) is preserved
+        // Note: usage info (monthlyCharacterUsage, usageResetDate) is preserved
+      },
+    });
+
+    // Delete command permission overrides
+    await prisma.commandPermission.deleteMany({
+      where: { guildId },
+    });
+
+    // Log the action
+    if (developerId) {
+      await prisma.developerAuditLog.create({
+        data: {
+          developerId,
+          action: "config_reset",
+          targetType: "guild",
+          targetId: guildId,
+          details: JSON.stringify({
+            resetAt: new Date().toISOString(),
+          }),
+        },
+      });
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error resetting guild config:", error);
+    return { success: false, error: error.message || "Failed to reset configuration" };
+  }
+}
+
 export const developerService = {
   getBotStats,
   listGuilds,
@@ -658,4 +774,5 @@ export const developerService = {
   getUserDetails,
   updateUserSubscription,
   getAuditLog,
+  resetGuildConfig,
 };

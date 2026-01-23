@@ -127,6 +127,34 @@ router.patch(
   }
 );
 
+/**
+ * Reset guild configuration
+ * POST /developer/guilds/:id/reset
+ */
+router.post(
+  "/guilds/:id/reset",
+  validateGuildId,
+  strictRateLimiter,
+  auditLog("developer_reset_guild_config"),
+  async (req: Request, res: Response) => {
+    try {
+      const result = await developerService.resetGuildConfig(
+        req.params.id,
+        req.user!.id
+      );
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ success: true, message: "Guild configuration has been reset" });
+    } catch (error) {
+      console.error("Error resetting guild config:", error);
+      res.status(500).json({ error: "Failed to reset configuration" });
+    }
+  }
+);
+
 // ============ User Management ============
 
 /**
