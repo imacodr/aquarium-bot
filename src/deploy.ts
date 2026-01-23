@@ -5,9 +5,7 @@ import path from "path";
 const commands: any[] = [];
 const commandsPath = path.join(__dirname, "commands");
 
-// Place your client and guild ids here
 const clientId = process.env.CLIENTID as string;
-const guildId = process.env.GUILDID as string;
 
 function loadCommands(dir: string): void {
   const items = fs.readdirSync(dir, { withFileTypes: true });
@@ -34,7 +32,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN as string);
   try {
     console.log("Started refreshing application (/) commands.");
 
-    await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+    await rest.put(Routes.applicationCommands(clientId), {
       body: commands,
     });
 
